@@ -11,6 +11,8 @@ from scrape import (
 )
 #Importing functions from scrape 
 
+from parse import parse_with_ollama
+
 st.title("AI Web Scrapper")
 #Used title as AI Web Scrapper
 
@@ -33,6 +35,18 @@ if st.button("Scrape the Site"):    # Creates a button namely Scrape the site
 
     # Creates a collapsable section to view the scrapped DOM content 
     with st.expander("View DOM Cotent"):
-        
+
         st.text_area("DOM Content",cleaned_content,height=300)  # Contains DOM contents with height of 300
 
+
+if "dom_content" in st.session_state:
+    parse_description = st.text_area("Describe what you want to parse?")
+
+    if st.button("Parse Content"):
+        if parse_description:
+            st.write("Parsing the Content")
+
+            dom_chunks = split_dom_content(st.session_state.dom_content)
+            result = parse_with_ollama(dom_chunks,parse_description)
+
+            st.write(result)
