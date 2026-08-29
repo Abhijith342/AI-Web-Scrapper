@@ -3,6 +3,7 @@
 
 import streamlit as st
 # Imported streamlit
+from scrape import scrape_website   #Importing the scrape_website function from scrape 
 
 st.title("AI Web Scrapper")
 #Used title as AI Web Scrapper
@@ -13,4 +14,7 @@ url = st.text_input("Enter a Website URL")
 
 if st.button("Scrape the Site"):    # Creates a button namely Scrape the site
     st.write("Scraping the website")    # After clicking we get this message
+
+    result = scrape_website(url)    #passing the url to the function 
+    print(result)   # the result is the html source code 
 
