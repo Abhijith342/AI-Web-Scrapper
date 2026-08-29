@@ -1,3 +1,6 @@
 venv/
 .vscode/
 chromedriver.exe
+config.py
+__pycache__/
+*.pyc
