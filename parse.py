@@ -22,21 +22,30 @@ USER REQUEST:
 EXTRACTION INSTRUCTIONS
 ============================================================
 
-The user may request multiple pieces of information.
+The user may request one or multiple pieces of information.
 
-You MUST process EVERY requested piece of information
-independently.
+You MUST identify exactly what information the user is requesting.
+
+IMPORTANT:
+
+If the user asks for ONE piece of information:
+- Return ONLY that one field.
+- Do NOT return other information merely because it appears
+  in the webpage content.
+
+If the user asks for MULTIPLE pieces of information:
+- Return ONLY those requested fields.
+- Process each requested field independently.
 
 For EACH requested field:
 
-1. Search the ENTIRE webpage content.
-2. Find the exact value associated with that field.
-3. Map that value to the requested field.
-4. Do NOT stop after finding other fields.
+1. Identify the exact field requested by the user.
+2. Search the ENTIRE webpage content for that field.
+3. Find the exact value associated with that field.
+4. Return only that requested field.
 5. If the value is not explicitly present, return null.
 6. Never guess or infer a value.
 7. Never use your own knowledge.
-
 
 ============================================================
 IMPORTANT MAPPING RULES
@@ -64,6 +73,50 @@ Examples:
 "48Whrs"
 → battery
 
+============================================================
+SINGLE-FIELD EXTRACTION EXAMPLES
+============================================================
+
+USER REQUEST:
+"What processor is used?"
+
+If the webpage contains:
+
+"AMD Ryzen 7 7445HS"
+"16GB RAM"
+"512GB SSD"
+"144Hz"
+
+Return ONLY:
+
+{{"processor": "AMD Ryzen 7 7445HS"}}
+
+Do NOT return RAM, storage, refresh rate, GPU,
+battery, or any other fields.
+
+
+USER REQUEST:
+"What is the refresh rate?"
+
+Return ONLY:
+
+{{"refresh_rate": "144Hz"}}
+
+
+USER REQUEST:
+"How much RAM does it have?"
+
+Return ONLY:
+
+{{"ram": "16GB"}}
+
+
+USER REQUEST:
+"What processor and RAM are used?"
+
+Return ONLY:
+
+{{"processor": "AMD Ryzen 7 7445HS", "ram": "16GB"}}
 
 ============================================================
 STRICT RULES
@@ -101,19 +154,35 @@ STRICT RULES
 
 
 ============================================================
-FINAL CHECK
+FINAL OUTPUT FORMAT
 ============================================================
 
-Before returning the answer, verify:
+Your response MUST contain ONLY the JSON object.
 
-- Did I process every requested field?
-- Did I search the entire supplied content?
-- Did I avoid guessing?
-- Did I return null for genuinely missing information?
-- Is the result valid JSON?
+DO NOT write:
+- explanations
+- reasoning
+- introductions
+- conclusions
+- notes
+- comments
+- markdown
+- code fences
+- sentences before the JSON
+- sentences after the JSON
 
+BAD RESPONSE:
 
-Return ONLY the JSON object.
+I searched the webpage and found that the fingerprint
+sensor is not mentioned.
+
+{{"fingerprint_sensor": null}}
+
+GOOD RESPONSE:
+
+{{"fingerprint_sensor": null}}
+
+Return ONLY the JSON object and NOTHING ELSE.
 """
 
 

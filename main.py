@@ -392,86 +392,52 @@ if "dom_content" in st.session_state:
 
                 st.subheader("Result")
 
-
-                # -------------------------------------------------
-                # CONVERT OLLAMA RESPONSE INTO JSON
-                # -------------------------------------------------
-
                 try:
-
-                    # Ollama returns JSON as a string.
-                    #
-                    # json.loads() converts that string
-                    # into a Python dictionary.
-                    #
-                    # Example:
-                    #
-                    # '{"processor": "Ryzen 7"}'
-                    #
-                    # becomes:
-                    #
-                    # {
-                    #     "processor": "Ryzen 7"
-                    # }
+                    # Convert Ollama's JSON response into a Python dictionary
                     parsed_result = json.loads(result)
 
+                    # --------------------------------------------------
+                    # Convert structured JSON into a natural language
+                    # response for the user.
+                    # --------------------------------------------------
 
-                    # -------------------------------------------------
-                    # DISPLAY EACH RESULT
-                    # -------------------------------------------------
+                    responses = []
 
-                    # Loop through every key-value pair.
-                    #
-                    # Example:
-                    #
-                    # processor → Ryzen 7
-                    # RAM       → 16 GB
-                    # GPU       → RTX 3050
                     for key, value in parsed_result.items():
 
+                        # Convert:
+                        # refresh_rate -> Refresh Rate
+                        # fingerprint_sensor -> Fingerprint Sensor
+                        display_key = key.replace(
+                            "_", " "
+                        ).title()
 
-                        # Convert keys such as:
-                        #
-                        # display_refresh_rate
-                        #
-                        # into:
-                        #
-                        # Display Refresh Rate
-                        display_key = (
-                            key.replace(
-                                "_",
-                                " "
-                            ).title()
-                        )
+                        # --------------------------------------------------
+                        # Handle missing information
+                        # --------------------------------------------------
 
-
-                        # If Ollama returned null,
-                        # show "Not found" instead.
                         if value is None:
 
-                            value = "Not found"
+                            responses.append(
+                                f"{display_key} is not mentioned "
+                                f"on the webpage."
+                            )
 
+                        else:
 
-                        # Display the extracted information.
-                        st.write(
-                            f"**{display_key}:** {value}"
-                        )
+                            responses.append(
+                                f"The {display_key.lower()} is {value}."
+                            )
 
-
-                # -------------------------------------------------
-                # HANDLE INVALID JSON
-                # -------------------------------------------------
+                    # Display the natural-language response
+                    for response in responses:
+                        st.write(response)
 
                 except json.JSONDecodeError:
 
-                    # Sometimes an LLM may return something
-                    # that isn't valid JSON.
-                    #
-                    # Instead of crashing the application,
-                    # simply display the raw response.
+                    # If Ollama somehow returns invalid JSON,
+                    # display the raw response instead.
                     st.write(result)
-
-
             # -------------------------------------------------
             # NO RELEVANT CONTENT
             # -------------------------------------------------

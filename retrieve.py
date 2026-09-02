@@ -321,10 +321,226 @@ def semantic_retrieve(
 
     return selected_sections, scores
 
+def keyword_retrieve_with_indexes(sections, query, top_k=5):
+    """
+    Keyword-based retrieval.
 
-# ============================================================
-# CURRENT SEMANTIC RETRIEVAL FUNCTION
-# ============================================================
+    Returns:
+        (section_index, keyword_score)
+
+    We return the INDEX of each section because hybrid
+    retrieval needs to know which exact sections were selected.
+    """
+
+    if not sections:
+        return []
+
+    query_words = process_query(query)
+
+    section_scores = []
+
+    for index, section in enumerate(sections):
+
+        # Convert section into lowercase words
+        section_words = re.findall(
+            r"\b[a-zA-Z0-9]+\b",
+            section.lower()
+        )
+
+        # Lemmatize the words in the section
+        section_words = {
+            LEMMATIZER.lemmatize(word)
+            for word in section_words
+        }
+
+        # Count how many query words appear
+        # in this section
+        matches = sum(
+            1
+            for word in query_words
+            if word in section_words
+        )
+
+        section_scores.append(
+            (index, matches)
+        )
+
+    # Highest keyword score first
+    section_scores.sort(
+        key=lambda item: item[1],
+        reverse=True
+    )
+
+    # Only keep sections that actually matched
+    return [
+        (index, score)
+        for index, score in section_scores[:top_k]
+        if score > 0
+    ]
+
+
+def semantic_retrieve_with_indexes(
+    sections,
+    embeddings,
+    query,
+    top_k=5
+):
+    """
+    Semantic retrieval.
+
+    Returns:
+        (section_index, similarity_score)
+    """
+
+    if not sections or embeddings is None:
+        return []
+
+    # Convert the user query into an embedding
+    query_embedding = model.encode(
+        [query]
+    )
+
+    # Compare query embedding with every section
+    similarities = cosine_similarity(
+        query_embedding,
+        embeddings
+    )[0]
+
+    # Sort from highest similarity to lowest
+    ranked_indexes = similarities.argsort()[::-1]
+
+    results = []
+
+    for index in ranked_indexes[:top_k]:
+
+        results.append(
+            (
+                int(index),
+                float(similarities[index])
+            )
+        )
+
+    return results
+
+
+def hybrid_retrieve(
+    sections,
+    embeddings,
+    query,
+    top_k=5,
+    rrf_k=60
+):
+    """
+    Hybrid retrieval combines:
+
+        1. Semantic search
+        2. Keyword search
+
+    using Reciprocal Rank Fusion (RRF).
+
+    RRF does not directly compare the semantic score
+    with the keyword score.
+
+    Instead, it compares their rankings.
+
+    Example:
+
+    Semantic:
+        section 4 -> rank 1
+        section 2 -> rank 2
+
+    Keyword:
+        section 2 -> rank 1
+        section 7 -> rank 2
+
+    RRF combines these rankings and gives sections
+    that perform well in both searches a higher score.
+    """
+
+    # --------------------------------------------------
+    # 1. Run semantic retrieval
+    # --------------------------------------------------
+
+    semantic_results = semantic_retrieve_with_indexes(
+        sections,
+        embeddings,
+        query,
+        top_k
+    )
+
+    # --------------------------------------------------
+    # 2. Run keyword retrieval
+    # --------------------------------------------------
+
+    keyword_results = keyword_retrieve_with_indexes(
+        sections,
+        query,
+        top_k
+    )
+
+    # --------------------------------------------------
+    # 3. Store the combined RRF scores
+    # --------------------------------------------------
+
+    rrf_scores = {}
+
+    # --------------------------------------------------
+    # 4. Add semantic rankings
+    # --------------------------------------------------
+
+    for rank, (index, score) in enumerate(
+        semantic_results,
+        start=1
+    ):
+
+        rrf_scores[index] = (
+            rrf_scores.get(index, 0)
+            + 1 / (rrf_k + rank)
+        )
+
+    # --------------------------------------------------
+    # 5. Add keyword rankings
+    # --------------------------------------------------
+
+    for rank, (index, score) in enumerate(
+        keyword_results,
+        start=1
+    ):
+
+        rrf_scores[index] = (
+            rrf_scores.get(index, 0)
+            + 1 / (rrf_k + rank)
+        )
+
+    # --------------------------------------------------
+    # 6. Sort sections by final RRF score
+    # --------------------------------------------------
+
+    ranked_sections = sorted(
+        rrf_scores.items(),
+        key=lambda item: item[1],
+        reverse=True
+    )
+
+    # --------------------------------------------------
+    # 7. Select the top sections
+    # --------------------------------------------------
+
+    selected_sections = []
+    scores = []
+
+    for index, score in ranked_sections[:top_k]:
+
+        selected_sections.append(
+            sections[index]
+        )
+
+        scores.append(
+            score
+        )
+
+    return selected_sections, scores
+
 
 def retrieve_relevant_content(
     sections,
@@ -332,23 +548,24 @@ def retrieve_relevant_content(
     query,
     top_k=5
 ):
+    """
+    Main retrieval function used by main.py.
 
-    # Get the top relevant sections from semantic search.
-    selected_sections, scores = semantic_retrieve(
+    Previously:
+        Semantic retrieval only
+
+    Now:
+        Hybrid retrieval
+        = Semantic + Keyword + RRF
+    """
+
+    selected_sections, scores = hybrid_retrieve(
         sections,
         embeddings,
         query,
         top_k
     )
 
-    # Convert the list of sections into one string.
-    #
-    # main.py expects relevant_content to be a string
-    # because it later uses:
-    #
-    # relevant_content.strip()
-    #
-    # and sends the content directly to Ollama.
     relevant_content = "\n\n".join(
         selected_sections
     )
