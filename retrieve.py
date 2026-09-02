@@ -1,243 +1,331 @@
-# ---------------------------------------------------------
-# IMPORT REQUIRED LIBRARIES
-# ---------------------------------------------------------
+import re
 
-# Streamlit is used here mainly for its caching feature.
-# @st.cache_resource allows us to load the embedding model
-# only once instead of loading it every time Streamlit
-# reruns the application.
 import streamlit as st
 
-
-# SentenceTransformer provides pre-trained models
-# that convert text into numerical vectors called
-# embeddings.
-#
-# We use these embeddings to compare the meaning of
-# the user's question with the webpage sections.
 from sentence_transformers import SentenceTransformer
-
-
-# cosine_similarity calculates how similar two
-# embedding vectors are.
-#
-# A higher similarity score means the texts are
-# semantically more similar.
 from sklearn.metrics.pairwise import cosine_similarity
 
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
 
-# ---------------------------------------------------------
-# LOAD EMBEDDING MODEL
-# ---------------------------------------------------------
 
-# @st.cache_resource tells Streamlit to load this model
-# only once and reuse it.
+# ============================================================
+# NLP SETUP
+# ============================================================
+
+# Load English stopwords.
 #
-# Without caching, Streamlit could reload the model
-# whenever the user interacts with the application,
-# which would make the application much slower.
+# Examples:
+# "the", "is", "a", "an", "what", "are", "of"
+#
+# These words usually don't help us identify the actual
+# information the user is looking for.
+STOP_WORDS = set(
+    stopwords.words("english")
+)
+
+# Used to convert related word forms into a common form.
+#
+# Example:
+#
+# processors -> processor
+# running    -> running
+#
+# This helps keyword matching.
+LEMMATIZER = WordNetLemmatizer()
+
+
+# ============================================================
+# EMBEDDING MODEL
+# ============================================================
+
 @st.cache_resource
 def load_embedding_model():
 
-    # Load the pre-trained MiniLM model.
+    # MiniLM converts text into numerical vectors.
     #
-    # all-MiniLM-L6-v2 is a lightweight sentence
-    # embedding model.
-    #
-    # It converts text into numerical vectors that
-    # represent the meaning of the text.
-    #
-    # device="cpu" means we run this model on the CPU.
-    # This is useful because your GPU has limited VRAM
-    # and Ollama already uses the GPU.
+    # device="cpu" means we run the embedding model on CPU.
     return SentenceTransformer(
         "all-MiniLM-L6-v2",
         device="cpu"
     )
 
 
-# Load the embedding model.
+# Load the model once.
 #
-# Because of @st.cache_resource, this model will be
-# reused instead of being loaded again on every
-# Streamlit interaction.
+# Streamlit normally reruns the Python file whenever the user
+# interacts with the UI.
+#
+# @st.cache_resource prevents the model from being loaded
+# again on every rerun.
 model = load_embedding_model()
 
 
-# ---------------------------------------------------------
-# SPLIT WEBPAGE INTO SECTIONS
-# ---------------------------------------------------------
+# ============================================================
+# TEXT CHUNKING
+# ============================================================
 
-# This function takes the cleaned webpage text
-# and divides it into smaller sections.
-#
-# Why?
-#
-# A complete webpage might contain:
-#
-# 12,000 characters
-#
-# Sending all of that to the LLM is inefficient.
-#
-# Instead we create smaller sections:
-#
-# Webpage
-#    ↓
-# Section 1
-# Section 2
-# Section 3
-# Section 4
-# ...
-#
-# Later we can search these sections individually.
-def split_into_sections(text, section_size=500):
+def split_into_sections(
+    text,
+    section_size=500
+):
 
-    # Split the complete text into individual lines.
-    #
-    # Example:
-    #
-    # "Processor: Ryzen 7"
-    # "RAM: 16 GB"
-    # "Storage: 512 GB"
-    #
-    # becomes separate lines.
+    # Split the webpage into individual lines.
     lines = text.splitlines()
 
-
-    # This list will contain the final sections.
     sections = []
 
-
-    # Temporarily stores lines belonging to
-    # the current section.
     current_section = []
 
-
-    # Keeps track of how many characters
-    # are currently in the section.
     current_length = 0
 
-
-    # Go through every line of the webpage.
     for line in lines:
 
-
-        # Check whether adding the next line would
-        # make the section larger than section_size.
-        #
-        # By default:
-        #
-        # section_size = 500
-        #
-        # So each section will contain roughly
-        # 500 characters.
+        # Check whether adding this line would make the
+        # current section larger than our desired size.
         if current_length + len(line) > section_size:
 
-
-            # Make sure the current section isn't empty.
+            # If we already have content, save the section.
             if current_section:
 
-                # Join all lines in the current section
-                # into one string.
                 sections.append(
                     "\n".join(current_section)
                 )
 
-
             # Start a new section.
             current_section = []
 
-
-            # Reset the character counter.
             current_length = 0
 
-
-        # Add the current line to the section.
         current_section.append(line)
 
-
-        # Increase the character count by the
-        # length of the current line.
         current_length += len(line)
 
-
-    # After the loop finishes, there may still be
-    # a final section that hasn't been added yet.
+    # Add the final section.
     if current_section:
 
         sections.append(
             "\n".join(current_section)
         )
 
-
-    # Return all the sections.
     return sections
 
 
-# ---------------------------------------------------------
+# ============================================================
 # CREATE EMBEDDINGS
-# ---------------------------------------------------------
+# ============================================================
 
-# This function converts every webpage section
-# into an embedding.
-#
-# Example:
-#
-# "AMD Ryzen 7 7445HS Processor"
-#
-# might become something like:
-#
-# [0.12, -0.43, 0.81, ...]
-#
-# The actual embedding contains many numerical
-# values representing the semantic meaning of
-# the text.
 def create_embeddings(sections):
 
-
-    # If there are no sections, there is nothing
-    # to convert into embeddings.
+    # Nothing to embed.
     if not sections:
 
         return None
 
-
     # Convert every section into an embedding.
-    #
-    # show_progress_bar=False prevents MiniLM
-    # from displaying a progress bar in Streamlit.
     embeddings = model.encode(
         sections,
         show_progress_bar=False
     )
 
-
-    # Return the generated embeddings.
     return embeddings
 
 
-# ---------------------------------------------------------
-# FIND RELEVANT CONTENT
-# ---------------------------------------------------------
+# ============================================================
+# PROCESS QUERY FOR KEYWORD SEARCH
+# ============================================================
 
-# This is the most important function in this file.
-#
-# It performs semantic search.
-#
-# It receives:
-#
-# sections:
-#     The webpage divided into smaller sections.
-#
-# embeddings:
-#     The numerical representation of every section.
-#
-# query:
-#     The user's question.
-#
-# top_k:
-#     The maximum number of relevant sections
-#     we want to retrieve.
+def process_query(query):
+
+    # Convert everything to lowercase.
+    query = query.lower()
+
+    # Extract individual words.
+    #
+    # Example:
+    #
+    # "What processor is used?"
+    #
+    # becomes:
+    #
+    # ["what", "processor", "is", "used"]
+    words = re.findall(
+        r"\b[a-zA-Z0-9]+\b",
+        query
+    )
+
+    # Remove common words.
+    filtered_words = [
+        word
+        for word in words
+        if word not in STOP_WORDS
+    ]
+
+    # Lemmatize the remaining words.
+    processed_words = [
+        LEMMATIZER.lemmatize(word)
+        for word in filtered_words
+    ]
+
+    return processed_words
+
+
+# ============================================================
+# KEYWORD RETRIEVAL
+# ============================================================
+
+def keyword_retrieve(
+    sections,
+    query,
+    top_k=5
+):
+
+    # If there are no sections, there is nothing to search.
+    if not sections:
+
+        return [], []
+
+    # Process the user's query.
+    query_words = process_query(query)
+
+    # Store:
+    #
+    # (section_index, keyword_score)
+    #
+    # for every section.
+    section_scores = []
+
+    # --------------------------------------------------------
+    # Check every webpage section
+    # --------------------------------------------------------
+
+    for index, section in enumerate(sections):
+
+        # Convert section to lowercase.
+        section_lower = section.lower()
+
+        # Extract words from the section.
+        section_words = re.findall(
+            r"\b[a-zA-Z0-9]+\b",
+            section_lower
+        )
+
+        # Lemmatize the section words.
+        section_words = {
+            LEMMATIZER.lemmatize(word)
+            for word in section_words
+        }
+
+        # Count how many query words appear in this section.
+        matches = sum(
+            1
+            for word in query_words
+            if word in section_words
+        )
+
+        # Store the section and its score.
+        section_scores.append(
+            (
+                index,
+                matches
+            )
+        )
+
+    # --------------------------------------------------------
+    # Sort sections by keyword score
+    # --------------------------------------------------------
+
+    section_scores.sort(
+        key=lambda item: item[1],
+        reverse=True
+    )
+
+    # --------------------------------------------------------
+    # Select top-k sections
+    # --------------------------------------------------------
+
+    selected_sections = []
+
+    scores = []
+
+    for index, score in section_scores:
+
+        # Don't include sections with zero keyword matches.
+        if score == 0:
+
+            continue
+
+        selected_sections.append(
+            sections[index]
+        )
+
+        scores.append(score)
+
+        if len(selected_sections) >= top_k:
+
+            break
+
+    return selected_sections, scores
+
+
+# ============================================================
+# SEMANTIC RETRIEVAL
+# ============================================================
+
+def semantic_retrieve(
+    sections,
+    embeddings,
+    query,
+    top_k=5
+):
+
+    # Make sure we actually have content.
+    if not sections or embeddings is None:
+
+        return [], []
+
+    # Convert the user's query into an embedding.
+    query_embedding = model.encode(
+        [query]
+    )
+
+    # Compare the query embedding against every section.
+    similarities = cosine_similarity(
+        query_embedding,
+        embeddings
+    )[0]
+
+    # Sort section indexes from highest similarity
+    # to lowest similarity.
+    ranked_indexes = similarities.argsort()[::-1]
+
+    selected_sections = []
+
+    scores = []
+
+    for index in ranked_indexes:
+
+        score = float(
+            similarities[index]
+        )
+
+        selected_sections.append(
+            sections[index]
+        )
+
+        scores.append(score)
+
+        if len(selected_sections) >= top_k:
+
+            break
+
+    return selected_sections, scores
+
+
+# ============================================================
+# CURRENT SEMANTIC RETRIEVAL FUNCTION
+# ============================================================
+
 def retrieve_relevant_content(
     sections,
     embeddings,
@@ -245,154 +333,27 @@ def retrieve_relevant_content(
     top_k=5
 ):
 
-
-    # Make sure we actually have webpage sections
-    # and embeddings before continuing.
-    if not sections or embeddings is None:
-
-        return "", []
-
-
-    # -----------------------------------------------------
-    # CREATE QUERY EMBEDDING
-    # -----------------------------------------------------
-
-    # Convert the user's question into an embedding.
-    #
-    # Example:
-    #
-    # User asks:
-    # "What processor is used?"
-    #
-    # This question is converted into a numerical
-    # vector representing its meaning.
-    query_embedding = model.encode(
-        [query]
+    # Get the top relevant sections from semantic search.
+    selected_sections, scores = semantic_retrieve(
+        sections,
+        embeddings,
+        query,
+        top_k
     )
 
-
-    # -----------------------------------------------------
-    # CALCULATE SIMILARITY
-    # -----------------------------------------------------
-
-    # Compare the user's question embedding
-    # against every webpage section embedding.
+    # Convert the list of sections into one string.
     #
-    # cosine_similarity returns a similarity score
-    # for each section.
+    # main.py expects relevant_content to be a string
+    # because it later uses:
     #
-    # Example:
+    # relevant_content.strip()
     #
-    # Section 1 → 0.536
-    # Section 2 → 0.521
-    # Section 3 → 0.471
-    # Section 4 → 0.455
-    #
-    # Higher score = more semantically similar.
-    similarities = cosine_similarity(
-        query_embedding,
-        embeddings
-    )[0]
+    # and sends the content directly to Ollama.
+    relevant_content = "\n\n".join(
+        selected_sections
+    )
 
-
-    # -----------------------------------------------------
-    # RANK SECTIONS
-    # -----------------------------------------------------
-
-    # Get the indexes of sections sorted according
-    # to their similarity score.
-    #
-    # [::-1] reverses the order so that the
-    # highest similarity comes first.
-    #
-    # Example:
-    #
-    # Original:
-    # [0.21, 0.53, 0.31, 0.76]
-    #
-    # Ranked indexes:
-    # [3, 1, 2, 0]
-    ranked_indexes = similarities.argsort()[::-1]
-
-
-    # This will store the sections that we
-    # decide to send to Ollama.
-    relevant_sections = []
-
-
-    # This will store the similarity score
-    # for each selected section.
-    #
-    # We use these scores in main.py to show
-    # "Semantic Relevance" to the user.
-    scores = []
-
-
-    # -----------------------------------------------------
-    # SELECT TOP-K SECTIONS
-    # -----------------------------------------------------
-
-    # Go through the sections from highest
-    # similarity to lowest similarity.
-    for index in ranked_indexes:
-
-
-        # Convert the NumPy similarity value
-        # into a normal Python float.
-        score = float(similarities[index])
-
-
-        # Add the corresponding webpage section
-        # to our relevant sections.
-        relevant_sections.append(
-            sections[index]
-        )
-
-
-        # Store its similarity score.
-        scores.append(score)
-
-
-        # Stop once we have collected the
-        # required number of sections.
-        #
-        # With:
-        #
-        # top_k = 5
-        #
-        # we retrieve at most five sections.
-        if len(relevant_sections) >= top_k:
-
-            break
-
-
-    # -----------------------------------------------------
-    # CHECK WHETHER WE FOUND ANYTHING
-    # -----------------------------------------------------
-
-    # This is a safety check.
-    #
-    # Normally relevant_sections should contain
-    # something if sections were provided.
-    if not relevant_sections:
-
-        return "", []
-
-
-    # -----------------------------------------------------
-    # RETURN RESULTS
-    # -----------------------------------------------------
-
-    # Join all retrieved sections together.
-    #
-    # "\n\n" gives two line breaks between sections
-    # so that Ollama can distinguish them more easily.
-    #
-    # We return BOTH:
-    #
-    # 1. relevant content
-    # 2. similarity scores
     return (
-        "\n\n".join(relevant_sections),
+        relevant_content,
         scores
     )

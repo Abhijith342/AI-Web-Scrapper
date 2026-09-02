@@ -1,32 +1,11 @@
-# ---------------------------------------------------------
-# IMPORT REQUIRED LIBRARIES
-# ---------------------------------------------------------
-
-# OllamaLLM allows us to communicate with our
-# locally running Ollama model.
 from langchain_ollama import OllamaLLM
-
-# ChatPromptTemplate is used to create a prompt
-# containing variables such as {dom_content}
-# and {parse_description}.
 from langchain_core.prompts import ChatPromptTemplate
 
 
-# ---------------------------------------------------------
-# PROMPT TEMPLATE
-# ---------------------------------------------------------
+# ============================================================
+# EXTRACTION PROMPT
+# ============================================================
 
-# This is the instruction that will be sent to Ollama.
-#
-# We are telling the LLM:
-#
-# "Here is some webpage content.
-#  Here is what the user wants.
-#  Extract only the requested information."
-#
-# {dom_content} and {parse_description} are variables.
-# Their actual values are supplied later inside
-# chain.invoke().
 template = """
 You are a strict information extraction system.
 
@@ -38,129 +17,139 @@ WEBPAGE CONTENT:
 USER REQUEST:
 {parse_description}
 
-RULES:
 
-1. Use ONLY information explicitly present in the webpage content.
-2. NEVER use your own knowledge.
-3. NEVER guess or infer missing values.
-4. NEVER use information from other products or websites.
-5. If a requested value is not explicitly present, return null.
-6. If the webpage says "up to", preserve "up to".
-7. Do not convert or modify values.
-8. Return ONLY valid JSON.
-9. Do not provide explanations.
-10. Do not use markdown code fences.
+============================================================
+EXTRACTION INSTRUCTIONS
+============================================================
 
-Return the requested information as JSON.
+The user may request multiple pieces of information.
+
+You MUST process EVERY requested piece of information
+independently.
+
+For EACH requested field:
+
+1. Search the ENTIRE webpage content.
+2. Find the exact value associated with that field.
+3. Map that value to the requested field.
+4. Do NOT stop after finding other fields.
+5. If the value is not explicitly present, return null.
+6. Never guess or infer a value.
+7. Never use your own knowledge.
+
+
+============================================================
+IMPORTANT MAPPING RULES
+============================================================
+
+Use the meaning of the webpage text when mapping values.
+
+Examples:
+
+"AMD Ryzen 7 7445HS"
+→ processor
+
+"16GB RAM"
+→ ram
+
+"512GB SSD"
+→ storage
+
+"RTX 3050-4GB"
+→ gpu
+
+"144Hz"
+→ refresh_rate
+
+"48Whrs"
+→ battery
+
+
+============================================================
+STRICT RULES
+============================================================
+
+1. Use ONLY information explicitly present in the webpage
+   content.
+
+2. NEVER use outside knowledge.
+
+3. NEVER guess missing values.
+
+4. NEVER combine information from unrelated products.
+
+5. If a requested value is not explicitly present,
+   return null.
+
+6. Preserve the original value as much as possible.
+
+7. If the webpage says "up to", preserve "up to".
+
+8. Do not convert units.
+
+9. Do not calculate values.
+
+10. Process EVERY requested field.
+
+11. Return ONLY valid JSON.
+
+12. Do NOT use markdown code fences.
+
+13. Do NOT provide explanations.
+
+14. Do NOT add fields that were not requested.
+
+
+============================================================
+FINAL CHECK
+============================================================
+
+Before returning the answer, verify:
+
+- Did I process every requested field?
+- Did I search the entire supplied content?
+- Did I avoid guessing?
+- Did I return null for genuinely missing information?
+- Is the result valid JSON?
+
+
+Return ONLY the JSON object.
 """
 
 
-# ---------------------------------------------------------
-# LOAD OLLAMA MODEL
-# ---------------------------------------------------------
+# ============================================================
+# OLLAMA MODEL
+# ============================================================
 
-# Create an Ollama LLM object.
-#
-# "llama3.2" is the model that Ollama will use
-# to analyze the webpage content.
-#
-# Since Ollama is running locally, the request
-# does not need to go to an external AI API.
 model = OllamaLLM(
     model="llama3.2"
 )
 
 
-# ---------------------------------------------------------
-# PARSE FUNCTION
-# ---------------------------------------------------------
+# ============================================================
+# PARSE CONTENT
+# ============================================================
 
-# This function receives:
-#
-# dom_content:
-#     The relevant webpage content retrieved
-#     by our semantic search.
-#
-# parse_description:
-#     The question/instruction entered by the user.
-#
-# Example:
-#
-# dom_content:
-#     "Processor: AMD Ryzen 7 7445HS..."
-#
-# parse_description:
-#     "What processor is used?"
-#
-# The function then asks Ollama to extract
-# the requested information.
 def parse_with_ollama(
     dom_content,
     parse_description
 ):
 
-
-    # -----------------------------------------------------
-    # CREATE PROMPT
-    # -----------------------------------------------------
-
-    # Convert our template into a LangChain prompt.
-    #
-    # LangChain recognizes:
-    #
-    # {dom_content}
-    # {parse_description}
-    #
-    # as variables that will be filled in later.
+    # Create the prompt template.
     prompt = ChatPromptTemplate.from_template(
         template
     )
 
-
-    # -----------------------------------------------------
-    # CREATE AI CHAIN
-    # -----------------------------------------------------
-
-    # The "|" operator connects the prompt to the model.
-    #
-    # So the flow becomes:
-    #
-    # Prompt
-    #   ↓
-    # Ollama
-    #
-    # When we invoke the chain, the prompt is first
-    # filled with our webpage content and user request,
-    # then sent to Llama 3.2.
+    # Connect the prompt to Ollama.
     chain = prompt | model
 
-
-    # -----------------------------------------------------
-    # SEND DATA TO OLLAMA
-    # -----------------------------------------------------
-
-    # Provide the actual values for the variables
-    # used inside our prompt.
-    #
-    # "dom_content" replaces:
-    #
-    # {dom_content}
-    #
-    # "parse_description" replaces:
-    #
-    # {parse_description}
+    # Send the webpage content and user's request.
     response = chain.invoke({
+
         "dom_content": dom_content,
+
         "parse_description": parse_description
+
     })
 
-
-    # -----------------------------------------------------
-    # RETURN OLLAMA RESPONSE
-    # -----------------------------------------------------
-
-    # Ollama's response is returned to main.py.
-    #
-    # main.py will then use json.loads()
-    # to convert the JSON string into a Python dictionary.
     return response
