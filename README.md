@@ -399,11 +399,8 @@ AI-Web-Scraper/
 ├── scrape.py            # Website scraping and HTML processing
 ├── retrieve.py          # Semantic, keyword and hybrid retrieval
 ├── parse.py             # Llama-based information extraction
-├── config.py            # Local configuration
-│
 ├── requirements.txt     # Python dependencies
 ├── README.md            # Project documentation
-├── .gitignore           # Ignored files
 │
 └── ...
 ```
@@ -415,7 +412,7 @@ AI-Web-Scraper/
 ## 1. Clone the Repository
 
 ```bash
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone https://github.com/Abhijith342/AI-Web-Scrapper.git
 ```
 
 Move into the project directory:
@@ -457,6 +454,19 @@ pip install -r requirements.txt
 ```
 
 ---
+# 🔐 Bright Data Configuration
+
+This project uses **Bright Data Scraping Browser** to access and scrape webpages, including dynamically rendered websites.
+
+## 1. Create `config.py`
+
+Create a file named:
+
+```text
+config.py
+
+SBR_WEBDRIVER = "YOUR_BRIGHT_DATA_WEBDRIVER_CONNECTION_STRING"
+
 
 # 🤖 Ollama Setup
 
@@ -483,24 +493,6 @@ llama3.2
 Make sure Ollama is running before using the application.
 
 ---
-
-# 🔐 Bright Data Configuration
-
-The scraper uses Bright Data's Scraping Browser.
-
-You need to configure your Bright Data WebDriver connection before running the application.
-
-Your credentials should **never be committed to GitHub**.
-
-Use environment variables or a local configuration file that is excluded from Git.
-
-Example:
-
-```text
-.env
-```
-
-Make sure sensitive files are included in `.gitignore`.
 
 ---
 
@@ -737,14 +729,6 @@ without needing to know how the underlying webpage is structured.
 The core scraping, cleaning, embedding, hybrid retrieval, and LLM extraction pipeline is functional.
 
 The remaining Version 3 work focuses on building a robust query-processing layer capable of handling comparisons, calculations, lists, aggregations, and general webpage questions.
-
----
-
-# 👨‍💻 Author
-
-**Abhijith**
-
-B.Tech — Artificial Intelligence & Data Science
 
 ---
 
