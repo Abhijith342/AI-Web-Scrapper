@@ -81,60 +81,51 @@ LEMMATIZER = WordNetLemmatizer()
 # scrape_website("https://example.com")
 #
 # returns the HTML source of the page.
-def scrape_website(website):
+import time
 
-    # Print a message in the terminal so that
-    # we know the browser is being launched.
+def scrape_website(website):
     print("Launching chrome browser...")
 
+    start = time.time()
 
-    # Create Chrome browser options.
-    #
-    # We can add things such as headless mode,
-    # user-agent settings, etc. here.
     options = webdriver.ChromeOptions()
 
+    # Don't wait for every image, font, analytics request,
+    # and other resource before driver.get() returns.
+    options.page_load_strategy = "eager"
 
-    # Create a remote Selenium browser session.
-    #
-    # Instead of running Chrome locally,
-    # the request is sent through Bright Data's
-    # Scraping Browser.
     driver = webdriver.Remote(
         command_executor=SBR_WEBDRIVER,
         options=options
     )
 
+    print(f"Browser launched: {time.time() - start:.2f}s")
 
     try:
+        start = time.time()
 
-        # Open the requested website.
         driver.get(website)
 
+        print(
+            f"Page loaded: {time.time() - start:.2f}s"
+        )
 
-        # Display a message after the page
-        # has successfully loaded.
-        print("Page loaded...")
+        start = time.time()
 
-
-        # Get the complete HTML source of the
-        # currently loaded webpage.
         html = driver.page_source
 
+        print(
+            f"HTML extracted: {time.time() - start:.2f}s"
+        )
 
-        # Return the HTML to the calling function.
+        print(
+            f"HTML size: {len(html):,} characters"
+        )
+
         return html
 
-
     finally:
-
-        # Always close the browser session.
-        #
-        # This is important because otherwise
-        # browser sessions could remain running
-        # and consume system resources.
         driver.quit()
-
 
 # --------------------------------------------------
 # EXTRACT BODY

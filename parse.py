@@ -214,11 +214,42 @@ def parse_with_ollama(
 
     # Send the webpage content and user's request.
     response = chain.invoke({
-
         "dom_content": dom_content,
-
         "parse_description": parse_description
-
     })
+
+    # --------------------------------------------------------
+    # CLEAN LLM RESPONSE
+    # --------------------------------------------------------
+    #
+    # Llama may sometimes return:
+    #
+    # "Here is the answer:
+    #  {\"ram\": \"24 GB\"}"
+    #
+    # instead of returning only:
+    #
+    # {"ram": "24 GB"}
+    #
+    # We remove unnecessary text before returning the result.
+    # --------------------------------------------------------
+
+    response = response.strip()
+
+    # Remove markdown code fences if the model adds them.
+    response = response.replace("```json", "")
+    response = response.replace("```", "")
+    response = response.strip()
+
+    # --------------------------------------------------------
+    # FIND JSON OBJECT
+    # --------------------------------------------------------
+
+    start = response.find("{")
+    end = response.rfind("}")
+
+    # If JSON was found, return only the JSON portion.
+    if start != -1 and end != -1 and start < end:
+        response = response[start:end + 1]
 
     return response
