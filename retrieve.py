@@ -5,6 +5,19 @@ import streamlit as st
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
+import nltk
+
+try:
+    nltk.data.find("corpora/stopwords")
+except LookupError:
+    nltk.download("stopwords", quiet=True)
+
+try:
+    nltk.data.find("corpora/wordnet")
+except LookupError:
+    nltk.download("wordnet", quiet=True)
+
+    
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 
