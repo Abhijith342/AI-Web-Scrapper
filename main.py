@@ -368,7 +368,7 @@ if "dom_content" in st.session_state:
                 # Show a loading message while Ollama
                 # processes the retrieved content.
                 with st.spinner(
-                    "Ollama is analyzing the content..."
+                    "Gemini is analyzing the content..."
                 ):
 
                     # Send two things to Ollama:

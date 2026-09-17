@@ -1,7 +1,7 @@
-from langchain_ollama import OllamaLLM
-from langchain_core.prompts import ChatPromptTemplate
-
-
+# from langchain_ollama import OllamaLLM
+# from langchain_core.prompts import ChatPromptTemplate
+from config import GEMINI_API_KEY
+from google import genai
 # ============================================================
 # EXTRACTION PROMPT
 # ============================================================
@@ -190,19 +190,23 @@ Return ONLY the JSON object and NOTHING ELSE.
 # OLLAMA MODEL
 # ============================================================
 
-model = OllamaLLM(
-    model="llama3.2"
-)
+# model = OllamaLLM(
+#     model="llama3.2"
+# )
 
+# gemini api instead of ollama
+
+
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ============================================================
 # PARSE CONTENT
 # ============================================================
-
 def parse_with_ollama(
     dom_content,
     parse_description
 ):
+    """
 
     # Create the prompt template.
     prompt = ChatPromptTemplate.from_template(
@@ -210,14 +214,24 @@ def parse_with_ollama(
     )
 
     # Connect the prompt to Ollama.
-    chain = prompt | model
+    chain = prompt | client
 
     # Send the webpage content and user's request.
     response = chain.invoke({
         "dom_content": dom_content,
         "parse_description": parse_description
     })
+    """
 
+    final_prompt = template.format(
+        dom_content=dom_content,
+        parse_description=parse_description
+    )
+    response = client.models.generate_content(
+        model="gemini-3.5-flash",
+        contents=final_prompt
+    )
+    response = response.text.strip()
     # --------------------------------------------------------
     # CLEAN LLM RESPONSE
     # --------------------------------------------------------
