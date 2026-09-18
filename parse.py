@@ -1,6 +1,12 @@
 # from langchain_ollama import OllamaLLM
 # from langchain_core.prompts import ChatPromptTemplate
-from config import GEMINI_API_KEY
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 from google import genai
 # ============================================================
 # EXTRACTION PROMPT

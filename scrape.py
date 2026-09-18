@@ -16,7 +16,13 @@ import selenium.webdriver as webdriver
 
 # SBR_WEBDRIVER contains the Bright Data
 # Web Scraper Browser connection details.
-from config import SBR_WEBDRIVER
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SBR_WEBDRIVER = os.getenv("SBR_WEBDRIVER")
 
 
 # BeautifulSoup is used to parse HTML
